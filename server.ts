@@ -19,12 +19,16 @@ app.use((req, res, next) => {
   next();
 });
 
-// ========== ОТКЛЮЧЕНИЕ CSP ==========
+// ========== ПРАВИЛЬНАЯ НАСТРОЙКА CSP ==========
 app.use((req, res, next) => {
-  res.removeHeader("Content-Security-Policy");
   res.setHeader(
     "Content-Security-Policy",
-    "script-src 'self' 'unsafe-eval' 'unsafe-inline' https: data:; style-src 'self' 'unsafe-inline';"
+    "default-src 'self'; " +
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; " +
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
+    "font-src 'self' https://fonts.gstatic.com; " +
+    "img-src 'self' data: https:; " +
+    "connect-src 'self' https:;"
   );
   next();
 });
