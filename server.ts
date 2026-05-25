@@ -11,7 +11,23 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 
-// --- IN-MEMORY REGISTERED USERS DATABASE ---
+// ========== CORS для всех запросов ==========
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
+// ========== ТЕСТОВЫЙ ЭНДПОИНТ ==========
+app.get("/api/test", (req, res) => {
+  res.json({ success: true, message: "API работает!", timestamp: Date.now() });
+});
+
+// ========== IN-MEMORY REGISTERED USERS DATABASE ==========
 interface ServerUserProfile {
   username: string;
   passwordHash: string;
@@ -19,11 +35,11 @@ interface ServerUserProfile {
   bio?: string;
   statusMessage?: string;
   lastActive?: number;
-  publicKey?: string; // Stringified JWK or export string
+  publicKey?: string;
 }
 const users = new Map<string, ServerUserProfile>();
 
-// Seed default test users so the reviewer can log in right away if they wish
+// Seed default test users
 users.set("test@mesa.com", {
   username: "Тест",
   passwordHash: "test1234",
@@ -50,14 +66,14 @@ users.set("elena@mesa.com", {
   passwordHash: "123456",
   statusMessage: "Спокойный собеседник",
   bio: "Ваш персональный ИИ помощник цифровой тишины и спокойствия в Mesa.",
-  lastActive: Date.now() + 10 * 365 * 24 * 60 * 60 * 1000, // basically always online
+  lastActive: Date.now() + 10 * 365 * 24 * 60 * 60 * 1000,
 });
 
-// --- REAL-TIME USER-TO-USER MESSAGING DATABASE ---
+// ========== MESSAGING DATABASE ==========
 interface ServerMessage {
   id: string;
-  sender: string; // sender email
-  recipient: string; // recipient email
+  sender: string;
+  recipient: string;
   text: string;
   time: string;
   timestamp: number;
@@ -70,13 +86,10 @@ interface ServerMessage {
 }
 const globalMessages: ServerMessage[] = [];
 
-// Map of userEmail (lowercase) -> Set of contactEmails (lowercase)
 const userContactsMap = new Map<string, Set<string>>();
-
-// Map of userEmail (lowercase) -> Map of contactEmail (lowercase) -> customName
 const contactRenameMap = new Map<string, Map<string, string>>();
 
-// --- IN-MEMORY PENDING REGISTER OTP LOGS ---
+// ========== OTP PENDING STORAGE ==========
 interface PendingRegistration {
   username: string;
   passwordHash: string;
@@ -85,7 +98,6 @@ interface PendingRegistration {
 }
 const pendingRegistrations = new Map<string, PendingRegistration>();
 
-// --- IN-MEMORY PENDING PASSWORD RESET OTP LOGS ---
 interface PendingReset {
   code: string;
   expiresAt: number;
@@ -93,7 +105,7 @@ interface PendingReset {
 }
 const pendingResets = new Map<string, PendingReset>();
 
-// Helper to send OTP using real SMTP or print to dev terminal if credentials are missing
+// ========== SEND OTP EMAIL ==========
 async function sendOTPEmail(to: string, code: string, type: "register" | "reset"): Promise<{ success: boolean; isMock: boolean }> {
   const host = process.env.SMTP_HOST;
   const port = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT) : 587;
@@ -136,10 +148,7 @@ async function sendOTPEmail(to: string, code: string, type: "register" | "reset"
         host,
         port,
         secure: port === 465,
-        auth: {
-          user,
-          pass,
-        },
+        auth: { user, pass },
       });
 
       await transporter.sendMail({
@@ -157,7 +166,6 @@ async function sendOTPEmail(to: string, code: string, type: "register" | "reset"
     }
   }
 
-  // Fallback log console format
   console.log("\n📬 ==================================================");
   console.log(`📧 [MOCK EMAIL OTP SENT]`);
   console.log(`TO: ${to}`);
@@ -168,7 +176,7 @@ async function sendOTPEmail(to: string, code: string, type: "register" | "reset"
   return { success: true, isMock: true };
 }
 
-// --- REAL VERIFICATION SYSTEM APIS ---
+// ========== AUTH API ROUTES ==========
 
 app.post("/api/auth/register-request", async (req, res) => {
   const { email, username, password } = req.body;
@@ -220,7 +228,6 @@ app.post("/api/auth/register-verify", (req, res) => {
     return res.status(400).json({ success: false, error: "Неверный код подтверждения. Попробуйте еще раз." });
   }
 
-  // Confirm registration
   users.set(normalizedEmail, {
     username: pending.username,
     passwordHash: pending.passwordHash,
@@ -373,7 +380,7 @@ app.post("/api/auth/reset-complete", (req, res) => {
   return res.json({ success: true });
 });
 
-// Lazy-loaded GenAI client to prevent startup failure if key is missing
+// ========== GEMINI AI ==========
 let aiClient: GoogleGenAI | null = null;
 function getGenAI(): GoogleGenAI | null {
   if (!aiClient) {
@@ -382,9 +389,7 @@ function getGenAI(): GoogleGenAI | null {
       aiClient = new GoogleGenAI({
         apiKey: key,
         httpOptions: {
-          headers: {
-            'User-Agent': 'aistudio-build',
-          }
+          headers: { 'User-Agent': 'aistudio-build' }
         }
       });
     }
@@ -392,10 +397,8 @@ function getGenAI(): GoogleGenAI | null {
   return aiClient;
 }
 
-// REST API endpoint for dynamic chats
-// --- REAL MESSENGER ROUTING & SYNC APIS ---
+// ========== MESSENGER API ROUTES ==========
 
-// Search for a registered user by email to add them
 app.get("/api/users/search", (req, res) => {
   const email = (req.query.email as string || "").toLowerCase().trim();
   if (!email) {
@@ -409,14 +412,10 @@ app.get("/api/users/search", (req, res) => {
 
   return res.json({
     success: true,
-    user: {
-      email,
-      username: user.username,
-    }
+    user: { email, username: user.username }
   });
 });
 
-// Heartbeat pulse & Profile synchronization API
 app.post("/api/users/pulse", (req, res) => {
   const { email, username, avatar, statusMessage, bio, publicKey } = req.body;
   if (!email) {
@@ -429,10 +428,7 @@ app.post("/api/users/pulse", (req, res) => {
     return res.status(404).json({ success: false, error: "Пользователь не найден." });
   }
 
-  // Update heartbeat status
   user.lastActive = Date.now();
-
-  // Update profile details dynamically if they are passed as parameters
   if (username) user.username = username;
   if (avatar !== undefined) user.avatar = avatar;
   if (statusMessage) user.statusMessage = statusMessage;
@@ -455,7 +451,6 @@ app.post("/api/users/pulse", (req, res) => {
   });
 });
 
-// Explicit user logout or disconnect (offline status)
 app.post("/api/users/disconnect", (req, res) => {
   const { email } = req.body;
   if (!email) return res.status(400).json({ success: false });
@@ -463,13 +458,12 @@ app.post("/api/users/disconnect", (req, res) => {
   const normalizedEmail = email.toLowerCase().trim();
   const user = users.get(normalizedEmail);
   if (user) {
-    user.lastActive = 0; // set inactive
+    user.lastActive = 0;
     users.set(normalizedEmail, user);
   }
   return res.json({ success: true });
 });
 
-// Get user's contacts
 app.get("/api/users/contacts", (req, res) => {
   const email = (req.query.email as string || "").toLowerCase().trim();
   if (!email) {
@@ -484,11 +478,9 @@ app.get("/api/users/contacts", (req, res) => {
     if (contactEmail === "elena@mesa.com") {
       isOnline = true;
     } else if (contactInfo && contactInfo.lastActive) {
-      // If user active in last 6 seconds, consider online
       isOnline = (Date.now() - contactInfo.lastActive) < 6000;
     }
 
-    // Support contact renames
     const userRenames = contactRenameMap.get(email);
     const customRenamedName = userRenames ? userRenames.get(contactEmail) : undefined;
     const contactName = customRenamedName || (contactInfo ? contactInfo.username : contactEmail.split("@")[0]);
@@ -496,28 +488,21 @@ app.get("/api/users/contacts", (req, res) => {
     const statusText = contactInfo && contactInfo.statusMessage ? contactInfo.statusMessage : "В фокусе";
 
     return {
-      id: contactEmail, // use email as ID
+      id: contactEmail,
       name: contactName,
       email: contactEmail,
       avatar: contactInfo && contactInfo.avatar ? contactInfo.avatar : "",
       bio: contactInfo && contactInfo.bio ? contactInfo.bio : (contactInfo && contactInfo.statusMessage ? contactInfo.statusMessage : ""),
       isOnline: isOnline,
       publicKey: contactInfo && contactInfo.publicKey ? contactInfo.publicKey : undefined,
-      statusText: {
-        EN: statusText,
-        RU: statusText
-      },
+      statusText: { EN: statusText, RU: statusText },
       unreadCount: 0
     };
   });
 
-  return res.json({
-    success: true,
-    contacts: contactsList
-  });
+  return res.json({ success: true, contacts: contactsList });
 });
 
-// Add a contact by email
 app.post("/api/users/contacts/add", (req, res) => {
   const { userEmail, contactEmail } = req.body;
   if (!userEmail || !contactEmail) {
@@ -536,13 +521,11 @@ app.post("/api/users/contacts/add", (req, res) => {
     return res.status(404).json({ success: false, error: "Пользователь с таким email не зарегистрирован." });
   }
 
-  // Add contact for user
   if (!userContactsMap.has(normalizedUser)) {
     userContactsMap.set(normalizedUser, new Set());
   }
   userContactsMap.get(normalizedUser)!.add(normalizedContact);
 
-  // Add back reciprocating contact for the other user too, so they can see this conversation!
   if (!userContactsMap.has(normalizedContact)) {
     userContactsMap.set(normalizedContact, new Set());
   }
@@ -566,43 +549,30 @@ app.post("/api/users/contacts/add", (req, res) => {
       avatar: contactUser.avatar || "",
       bio: contactUser.bio || (contactUser.statusMessage || ""),
       isOnline: isOnline,
-      statusText: {
-        EN: initialStatusText,
-        RU: initialStatusText
-      },
+      statusText: { EN: initialStatusText, RU: initialStatusText },
       unreadCount: 0
     }
   });
 });
 
-// Fetch messages involving user
 app.get("/api/messages/sync", (req, res) => {
   const email = (req.query.email as string || "").toLowerCase().trim();
   if (!email) {
     return res.status(400).json({ success: false, error: "Email пользователя обязателен." });
   }
 
-  // Filter messages that belong to the user and are NOT soft deleted by them
   const userMessages = globalMessages.filter(msg => {
     const isSender = msg.sender.toLowerCase() === email;
     const isRecipient = msg.recipient.toLowerCase() === email;
     const isParticipant = isSender || isRecipient;
     if (!isParticipant) return false;
-    
-    // Filter out if user soft deleted this specific message
-    if (msg.deletedBy && msg.deletedBy.includes(email)) {
-      return false;
-    }
+    if (msg.deletedBy && msg.deletedBy.includes(email)) return false;
     return true;
   });
 
-  return res.json({
-    success: true,
-    messages: userMessages
-  });
+  return res.json({ success: true, messages: userMessages });
 });
 
-// Rename contact/chat
 app.post("/api/users/contacts/rename", (req, res) => {
   const { userEmail, contactEmail, newName } = req.body;
   if (!userEmail || !contactEmail || !newName) {
@@ -619,7 +589,6 @@ app.post("/api/users/contacts/rename", (req, res) => {
   return res.json({ success: true, newName: newName.trim() });
 });
 
-// Delete full chat / thread
 app.post("/api/chats/delete", (req, res) => {
   const { userEmail, contactEmail, deleteForEveryone } = req.body;
   if (!userEmail || !contactEmail) {
@@ -629,30 +598,23 @@ app.post("/api/chats/delete", (req, res) => {
   const cEmail = contactEmail.toLowerCase().trim();
 
   if (deleteForEveryone) {
-    // Delete messages from globally stored list entirely
     for (let i = globalMessages.length - 1; i >= 0; i--) {
       const m = globalMessages[i];
       const match = (m.sender.toLowerCase() === uEmail && m.recipient.toLowerCase() === cEmail) ||
                     (m.sender.toLowerCase() === cEmail && m.recipient.toLowerCase() === uEmail);
-      if (match) {
-        globalMessages.splice(i, 1);
-      }
+      if (match) globalMessages.splice(i, 1);
     }
   } else {
-    // Soft delete messages only for this user
     globalMessages.forEach(m => {
       const match = (m.sender.toLowerCase() === uEmail && m.recipient.toLowerCase() === cEmail) ||
                     (m.sender.toLowerCase() === cEmail && m.recipient.toLowerCase() === uEmail);
       if (match) {
         if (!m.deletedBy) m.deletedBy = [];
-        if (!m.deletedBy.includes(uEmail)) {
-          m.deletedBy.push(uEmail);
-        }
+        if (!m.deletedBy.includes(uEmail)) m.deletedBy.push(uEmail);
       }
     });
   }
 
-  // Also remove contact relationships from local userContactsMap of user so it disappears from left list
   if (userContactsMap.has(uEmail)) {
     userContactsMap.get(uEmail)!.delete(cEmail);
   }
@@ -660,7 +622,6 @@ app.post("/api/chats/delete", (req, res) => {
   return res.json({ success: true });
 });
 
-// Pin / Unpin single message
 app.post("/api/messages/pin", (req, res) => {
   const { messageId, isPinned } = req.body;
   if (!messageId) {
@@ -674,7 +635,6 @@ app.post("/api/messages/pin", (req, res) => {
   return res.status(404).json({ success: false, error: "Сообщение не найдено." });
 });
 
-// Delete single message
 app.post("/api/messages/delete", (req, res) => {
   const { messageId, userEmail, deleteForEveryone } = req.body;
   if (!messageId || !userEmail) {
@@ -689,16 +649,13 @@ app.post("/api/messages/delete", (req, res) => {
       globalMessages.splice(index, 1);
     } else {
       if (!msg.deletedBy) msg.deletedBy = [];
-      if (!msg.deletedBy.includes(uEmail)) {
-        msg.deletedBy.push(uEmail);
-      }
+      if (!msg.deletedBy.includes(uEmail)) msg.deletedBy.push(uEmail);
     }
     return res.json({ success: true });
   }
   return res.status(404).json({ success: false, error: "Сообщение не найдено." });
 });
 
-// Send message
 app.post("/api/messages/send", async (req, res) => {
   const { sender, recipient, text, isEncrypted, encryptedKeyForRecipient, encryptedKeyForSender, iv } = req.body;
   if (!sender || !recipient || !text) {
@@ -708,7 +665,6 @@ app.post("/api/messages/send", async (req, res) => {
   const normalizedSender = sender.toLowerCase().trim();
   const normalizedRecipient = recipient.toLowerCase().trim();
 
-  // Create message
   const userMsg: ServerMessage = {
     id: `msg-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
     sender: normalizedSender,
@@ -724,7 +680,6 @@ app.post("/api/messages/send", async (req, res) => {
 
   globalMessages.push(userMsg);
 
-  // Auto-add contact relationship on message if it doesn't exist, to prevent empty state UI
   if (!userContactsMap.has(normalizedSender)) {
     userContactsMap.set(normalizedSender, new Set());
   }
@@ -735,11 +690,9 @@ app.post("/api/messages/send", async (req, res) => {
   }
   userContactsMap.get(normalizedRecipient)!.add(normalizedSender);
 
-  // If the recipient is the Seed AI assistant (elena@mesa.com or any user ending with @ai), trigger Gemini
   if (normalizedRecipient === "elena@mesa.com" || normalizedRecipient.endsWith("@ai")) {
     const contactName = users.get(normalizedRecipient)?.username || "Елена Ростова";
     
-    // Simulate typing delay on backend
     setTimeout(async () => {
       let replyText = "";
       try {
@@ -783,10 +736,7 @@ app.post("/api/messages/send", async (req, res) => {
     }, 1000);
   }
 
-  return res.json({
-    success: true,
-    message: userMsg
-  });
+  return res.json({ success: true, message: userMsg });
 });
 
 app.post("/api/chat", async (req, res) => {
@@ -796,15 +746,12 @@ app.post("/api/chat", async (req, res) => {
   }
 
   const name = contactName || "Елена Ростова";
-
-  // Find the last user message
   const userMessages = messages.filter((m: any) => m.sender === "user");
   const lastUserMessage = userMessages[userMessages.length - 1]?.text || "Привет!";
 
   try {
     const ai = getGenAI();
     if (!ai) {
-      // Return a mindful dynamic fallback reply if the Gemini API key is not configured
       const fallbackReplies = [
         `Привет! Я ${name}. Очень приятно с тобой общаться. Надеюсь, твой день проходит отлично!`,
         "Это действительно интересная и глубокая мысль. Нам всем важно ценить моменты взаимопонимания.",
@@ -834,23 +781,29 @@ app.post("/api/chat", async (req, res) => {
   }
 });
 
-// ========== ЗАПУСК СЕРВЕРА (исправленный) ==========
+// ========== STATIC FILES & SPA FALLBACK ==========
 
-const fs = require("fs");
 const distPath = path.join(process.cwd(), "dist");
 const indexPath = path.join(distPath, "index.html");
+const fs = require("fs");
 
 console.log(`🔍 Checking dist path: ${distPath}`);
 console.log(`📄 index.html exists: ${fs.existsSync(indexPath)}`);
 
-// Раздача статики
+// Раздача статики (CSS, JS, изображения)
 if (fs.existsSync(distPath)) {
   app.use(express.static(distPath));
   console.log(`📁 Static files served from ${distPath}`);
 }
 
-// Явный обработчик корневого пути
-app.get("/", (req, res) => {
+// ВСЕ API маршруты уже обработаны выше!
+// Этот обработчик НЕ должен перехватывать API запросы
+app.get("*", (req, res) => {
+  // Пропускаем API запросы — они уже должны быть обработаны
+  if (req.path.startsWith("/api")) {
+    return res.status(404).json({ error: "API endpoint not found" });
+  }
+  // Для всех остальных маршрутов отдаём index.html (SPA)
   if (fs.existsSync(indexPath)) {
     res.sendFile(indexPath);
   } else {
@@ -858,19 +811,10 @@ app.get("/", (req, res) => {
   }
 });
 
-// Обработчик SPA: все неизвестные маршруты отдаём index.html
-app.get("*", (req, res) => {
-  // API маршруты уже обработаны выше, сюда они не попадают
-  if (fs.existsSync(indexPath)) {
-    res.sendFile(indexPath);
-  } else {
-    res.status(404).send("Page not found");
-  }
-});
+// ========== START SERVER ==========
 
-// Запуск сервера
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`🔗 URL: http://localhost:${PORT}`);
-  console.log(`📧 SMTP: ${process.env.SMTP_HOST ? "configured" : "not configured"}`);
+  console.log(`📧 SMTP configured: ${process.env.SMTP_HOST ? "yes" : "no"}`);
 });
