@@ -834,25 +834,43 @@ app.post("/api/chat", async (req, res) => {
   }
 });
 
-// ========== ЗАПУСК СЕРВЕРА (упрощённый для Railway) ==========
+// ========== ЗАПУСК СЕРВЕРА (исправленный) ==========
 
-// Раздача статики из папки dist (фронтенд)
-const distPath = path.join(process.cwd(), "dist");
 const fs = require("fs");
+const distPath = path.join(process.cwd(), "dist");
+const indexPath = path.join(distPath, "index.html");
+
+console.log(`🔍 Checking dist path: ${distPath}`);
+console.log(`📄 index.html exists: ${fs.existsSync(indexPath)}`);
+
+// Раздача статики
 if (fs.existsSync(distPath)) {
   app.use(express.static(distPath));
-  // Для SPA: все неизвестные маршруты отдаём index.html
-  app.get("*", (req, res) => {
-    res.sendFile(path.join(distPath, "index.html"));
-  });
   console.log(`📁 Static files served from ${distPath}`);
-} else {
-  console.log(`⚠️ dist folder not found at ${distPath}. API only mode.`);
 }
+
+// Явный обработчик корневого пути
+app.get("/", (req, res) => {
+  if (fs.existsSync(indexPath)) {
+    res.sendFile(indexPath);
+  } else {
+    res.status(500).send("Build failed: index.html not found");
+  }
+});
+
+// Обработчик SPA: все неизвестные маршруты отдаём index.html
+app.get("*", (req, res) => {
+  // API маршруты уже обработаны выше, сюда они не попадают
+  if (fs.existsSync(indexPath)) {
+    res.sendFile(indexPath);
+  } else {
+    res.status(404).send("Page not found");
+  }
+});
 
 // Запуск сервера
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`🔗 URL: http://localhost:${PORT}`);
-  console.log(`📧 SMTP настроен: ${process.env.SMTP_HOST ? "да" : "нет"}`);
+  console.log(`📧 SMTP: ${process.env.SMTP_HOST ? "configured" : "not configured"}`);
 });
