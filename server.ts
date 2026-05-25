@@ -10,6 +10,13 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 
+// ========== ПОЛНОЕ ОТКЛЮЧЕНИЕ CSP ==========
+app.use((req, res, next) => {
+  res.removeHeader("Content-Security-Policy");
+  res.setHeader("Content-Security-Policy", "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; script-src * 'unsafe-inline' 'unsafe-eval' data: blob:;");
+  next();
+});
+
 // ========== CORS ==========
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
@@ -19,26 +26,12 @@ app.use((req, res, next) => {
   next();
 });
 
-// ========== ПРАВИЛЬНАЯ НАСТРОЙКА CSP ==========
-app.use((req, res, next) => {
-  res.setHeader(
-    "Content-Security-Policy",
-    "default-src 'self'; " +
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; " +
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
-    "font-src 'self' https://fonts.gstatic.com; " +
-    "img-src 'self' data: https:; " +
-    "connect-src 'self' https:;"
-  );
-  next();
-});
-
 // ========== ТЕСТОВЫЙ ЭНДПОИНТ ==========
 app.get("/api/test", (req, res) => {
   res.json({ success: true, message: "API работает!", timestamp: Date.now() });
 });
 
-// ========== ОТПРАВКА ПИСЕМ ЧЕРЕЗ GMAIL ==========
+// ========== ОТПРАВКА ПИСЕМ ==========
 async function sendOTPEmail(to: string, code: string, type: "register" | "reset") {
   const host = process.env.SMTP_HOST;
   const port = parseInt(process.env.SMTP_PORT || "587");
@@ -73,16 +66,16 @@ async function sendOTPEmail(to: string, code: string, type: "register" | "reset"
   return { success: true, isMock: true, debugCode: code };
 }
 
-// ========== ВРЕМЕННАЯ БАЗА ==========
+// ========== БАЗА ДАННЫХ ==========
 const users = new Map();
 const pendingRegistrations = new Map();
 
 users.set("test@mesa.com", { username: "Тест", passwordHash: "test1234" });
 
-// ========== API РЕГИСТРАЦИИ ==========
+// ========== API ==========
 app.post("/api/auth/register-request", async (req, res) => {
   const { email, username, password } = req.body;
-  console.log("Register request:", { email, username, password });
+  console.log("Register:", { email, username });
 
   if (!email || !username || !password) {
     return res.status(400).json({ success: false, error: "Все поля обязательны" });
@@ -102,11 +95,7 @@ app.post("/api/auth/register-request", async (req, res) => {
   });
 
   const result = await sendOTPEmail(normalizedEmail, code, "register");
-  res.json({
-    success: true,
-    isMock: result.isMock,
-    debugCode: result.debugCode,
-  });
+  res.json({ success: true, isMock: result.isMock, debugCode: result.debugCode });
 });
 
 app.post("/api/auth/register-verify", (req, res) => {
@@ -141,7 +130,7 @@ const distPath = path.join(process.cwd(), "dist");
 const indexPath = path.join(distPath, "index.html");
 const fs = require("fs");
 
-console.log(`Dist path: ${distPath}, index.html exists: ${fs.existsSync(indexPath)}`);
+console.log(`Dist: ${distPath}, index.html exists: ${fs.existsSync(indexPath)}`);
 
 if (fs.existsSync(distPath)) {
   app.use(express.static(distPath));
@@ -154,12 +143,12 @@ app.get("*", (req, res) => {
   if (fs.existsSync(indexPath)) {
     res.sendFile(indexPath);
   } else {
-    res.status(500).send("Frontend not built");
+    res.status(500).send("Frontend not built. Run npm run build");
   }
 });
 
 // ========== ЗАПУСК ==========
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📧 SMTP: ${process.env.SMTP_HOST ? "configured" : "not configured"}`);
+  console.log(`📧 SMTP: ${process.env.SMTP_HOST ? "yes" : "no"}`);
 });
