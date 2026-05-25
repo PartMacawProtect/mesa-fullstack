@@ -11,6 +11,15 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 
+// ========== CSP HEADER ==========
+app.use((req, res, next) => {
+  res.setHeader(
+    "Content-Security-Policy",
+    "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://generativelanguage.googleapis.com; frame-ancestors 'none';"
+  );
+  next();
+});
+
 // ========== CORS ==========
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
@@ -458,3 +467,4 @@ app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📧 SMTP: ${process.env.SMTP_HOST ? "configured" : "not configured"}`);
 });
+
