@@ -1,0 +1,148 @@
+@import url('https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap');
+@import "tailwindcss";
+
+@variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Hanken Grotesk", sans-serif;
+  
+  --color-primary: #15196c;
+  --color-on-primary: #ffffff;
+  --color-primary-fixed: #e0e0ff;
+  --color-primary-fixed-dim: #bfc2ff;
+  --color-on-primary-fixed: #070963;
+  --color-on-primary-fixed-variant: #393e8e;
+  
+  --color-secondary: #5d5f5f;
+  --color-on-secondary: #ffffff;
+  --color-secondary-container: #dfe0e0;
+  --color-on-secondary-container: #616363;
+  
+  --color-background: #f7f9fb;
+  --color-on-background: #191c1e;
+  
+  --color-surface: #f7f9fb;
+  --color-on-surface: #191c1e;
+  --color-on-surface-variant: #464651;
+  --color-surface-dim: #d8dadc;
+  --color-surface-bright: #f7f9fb;
+  
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #f2f4f6;
+  --color-surface-container: #eceef0;
+  --color-surface-container-high: #e6e8ea;
+  --color-surface-container-highest: #e0e3e5;
+  
+  --color-outline: #777682;
+  --color-outline-variant: #c7c5d3;
+}
+
+:root {
+  --color-primary: #15196c;
+  --color-on-primary: #ffffff;
+  --color-primary-fixed: #e0e0ff;
+  --color-primary-fixed-dim: #bfc2ff;
+  --color-on-primary-fixed: #070963;
+  --color-on-primary-fixed-variant: #393e8e;
+  
+  --color-secondary: #5d5f5f;
+  --color-on-secondary: #ffffff;
+  --color-secondary-container: #dfe0e0;
+  --color-on-secondary-container: #616363;
+  
+  --color-background: #f7f9fb;
+  --color-on-background: #191c1e;
+  
+  --color-surface: #f7f9fb;
+  --color-on-surface: #191c1e;
+  --color-on-surface-variant: #464651;
+  --color-surface-dim: #d8dadc;
+  --color-surface-bright: #f7f9fb;
+  
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #f2f4f6;
+  --color-surface-container: #eceef0;
+  --color-surface-container-high: #e6e8ea;
+  --color-surface-container-highest: #e0e3e5;
+  
+  --color-outline: #777682;
+  --color-outline-variant: #c7c5d3;
+}
+
+/* Cosmic Slate Dark Theme */
+.dark {
+  --color-primary: #4f46e5;
+  --color-on-primary: #ffffff;
+  --color-primary-fixed: #1e1b4b;
+  --color-primary-fixed-dim: #312e81;
+  --color-on-primary-fixed: #e0e7ff;
+  --color-on-primary-fixed-variant: #818cf8;
+  
+  --color-background: #090d16;
+  --color-on-background: #f8fafc;
+  
+  --color-surface: #0f172a;
+  --color-on-surface: #f8fafc;
+  --color-on-surface-variant: #94a3b8;
+  --color-surface-dim: #020617;
+  --color-surface-bright: #1e293b;
+  
+  --color-surface-container-lowest: #1e293b;
+  --color-surface-container-low: #0f172a;
+  --color-surface-container: #1b2535;
+  --color-surface-container-high: #334155;
+  --color-surface-container-highest: #475569;
+  
+  --color-outline: #64748b;
+  --color-outline-variant: #334155;
+}
+
+body {
+  font-family: 'Hanken Grotesk', sans-serif;
+  background-color: var(--color-background);
+  color: var(--color-on-background);
+  overflow-x: hidden;
+}
+
+.ambient-shadow {
+  box-shadow: 0 8px 32px rgba(45, 50, 130, 0.04), 0 2px 8px rgba(45, 50, 130, 0.02);
+}
+
+.material-symbols-outlined {
+  font-family: 'Material Symbols Outlined', sans-serif;
+  font-weight: normal;
+  font-style: normal;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "liga";
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
+.material-symbols-outlined.filled {
+  font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
+/* Hide tailwind scrollbar while maintaining elegant scroll behavior */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-outline-variant);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-outline);
+}

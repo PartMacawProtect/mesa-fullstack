@@ -1,0 +1,1 @@
+{"rewrites":[{"source":"/api/(.*)","destination":"https://node-express-app-d788ea19.containers.snapdeploy.dev/api/$1"}]} 
