@@ -2,12 +2,11 @@ import express from "express";
 import path from "path";
 import dotenv from "dotenv";
 import nodemailer from "nodemailer";
-import { Resend } from "resend";
 
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PPORT || 3000;
+const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 
@@ -20,11 +19,12 @@ app.use((req, res, next) => {
   next();
 });
 
-// ========== ОТКЛЮЧЕНИЕ CSP ДЛЯ РАБОТЫ REACT ==========
+// ========== ОТКЛЮЧЕНИЕ CSP ==========
 app.use((req, res, next) => {
+  res.removeHeader("Content-Security-Policy");
   res.setHeader(
     "Content-Security-Policy",
-    "script-src 'self' 'unsafe-eval' 'unsafe-inline' https:; style-src 'self' 'unsafe-inline';"
+    "script-src 'self' 'unsafe-eval' 'unsafe-inline' https: data:; style-src 'self' 'unsafe-inline';"
   );
   next();
 });
@@ -34,74 +34,51 @@ app.get("/api/test", (req, res) => {
   res.json({ success: true, message: "API работает!", timestamp: Date.now() });
 });
 
-// ========== НАСТРОЙКИ ПОЧТЫ ==========
-const RESEND_API_KEY = process.env.RESEND_API_KEY;
-const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
-
+// ========== ОТПРАВКА ПИСЕМ ЧЕРЕЗ GMAIL ==========
 async function sendOTPEmail(to: string, code: string, type: "register" | "reset") {
+  const host = process.env.SMTP_HOST;
+  const port = parseInt(process.env.SMTP_PORT || "587");
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
+
   const subject = type === "register" ? "Mesa — Код подтверждения" : "Mesa — Сброс пароля";
-  const text = `Ваш код: ${code}. Действителен 10 минут.`;
-  const html = `<div style="font-family: sans-serif;"><h2>Mesa</h2><p>${text}</p></div>`;
+  const html = `<div style="font-family: sans-serif;"><h2>Mesa</h2><p>Ваш код: <strong>${code}</strong></p><p>Действителен 10 минут.</p></div>`;
 
-  // ===== 1. Пробуем Gmail SMTP =====
-  const smtpHost = process.env.SMTP_HOST;
-  const smtpPort = parseInt(process.env.SMTP_PORT || "587");
-  const smtpUser = process.env.SMTP_USER;
-  const smtpPass = process.env.SMTP_PASS;
-
-  if (smtpHost && smtpUser && smtpPass) {
+  if (host && user && pass) {
     try {
       const transporter = nodemailer.createTransport({
-        host: smtpHost,
-        port: smtpPort,
-        secure: smtpPort === 465,
-        auth: { user: smtpUser, pass: smtpPass },
+        host,
+        port,
+        secure: port === 465,
+        auth: { user, pass },
       });
       await transporter.sendMail({
-        from: `"Mesa" <${smtpUser}>`,
-        to,
-        subject,
-        text,
-        html,
-      });
-      console.log(`[Gmail SMTP] Code sent to ${to}`);
-      return { success: true, isMock: false };
-    } catch (err) {
-      console.error("[Gmail SMTP] Error:", err);
-    }
-  }
-
-  // ===== 2. Пробуем Resend =====
-  if (resend) {
-    try {
-      await resend.emails.send({
-        from: "Mesa <onboarding@resend.dev>",
+        from: `"Mesa" <${user}>`,
         to,
         subject,
         html,
       });
-      console.log(`[Resend] Code sent to ${to}`);
+      console.log(`[SMTP] Code sent to ${to}`);
       return { success: true, isMock: false };
     } catch (err) {
-      console.error("[Resend] Error:", err);
+      console.error("[SMTP Error]", err);
     }
   }
 
-  // ===== 3. Резерв: вывод в консоль =====
   console.log(`\n📧 [MOCK] Code for ${to}: ${code}\n`);
   return { success: true, isMock: true, debugCode: code };
 }
 
-// ========== ВРЕМЕННАЯ БАЗА ДАННЫХ ==========
+// ========== ВРЕМЕННАЯ БАЗА ==========
 const users = new Map();
-users.set("test@mesa.com", { username: "Тест", passwordHash: "test1234" });
-
 const pendingRegistrations = new Map();
+
+users.set("test@mesa.com", { username: "Тест", passwordHash: "test1234" });
 
 // ========== API РЕГИСТРАЦИИ ==========
 app.post("/api/auth/register-request", async (req, res) => {
   const { email, username, password } = req.body;
-  console.log("[DEBUG] Register request:", { email, username, password });
+  console.log("Register request:", { email, username, password });
 
   if (!email || !username || !password) {
     return res.status(400).json({ success: false, error: "Все поля обязательны" });
@@ -133,16 +110,9 @@ app.post("/api/auth/register-verify", (req, res) => {
   const normalizedEmail = email.toLowerCase().trim();
   const pending = pendingRegistrations.get(normalizedEmail);
 
-  if (!pending) {
-    return res.status(400).json({ success: false, error: "Сессия не найдена" });
-  }
-  if (pending.expiresAt < Date.now()) {
-    pendingRegistrations.delete(normalizedEmail);
-    return res.status(400).json({ success: false, error: "Код истёк" });
-  }
-  if (pending.code !== code) {
-    return res.status(400).json({ success: false, error: "Неверный код" });
-  }
+  if (!pending) return res.status(400).json({ success: false, error: "Сессия не найдена" });
+  if (pending.expiresAt < Date.now()) return res.status(400).json({ success: false, error: "Код истёк" });
+  if (pending.code !== code) return res.status(400).json({ success: false, error: "Неверный код" });
 
   users.set(normalizedEmail, {
     username: pending.username,
@@ -150,11 +120,7 @@ app.post("/api/auth/register-verify", (req, res) => {
   });
   pendingRegistrations.delete(normalizedEmail);
 
-  res.json({
-    success: true,
-    email: normalizedEmail,
-    username: pending.username,
-  });
+  res.json({ success: true, email: normalizedEmail, username: pending.username });
 });
 
 app.post("/api/auth/login", (req, res) => {
@@ -171,7 +137,7 @@ const distPath = path.join(process.cwd(), "dist");
 const indexPath = path.join(distPath, "index.html");
 const fs = require("fs");
 
-console.log(`📁 Dist path: ${distPath}, index.html exists: ${fs.existsSync(indexPath)}`);
+console.log(`Dist path: ${distPath}, index.html exists: ${fs.existsSync(indexPath)}`);
 
 if (fs.existsSync(distPath)) {
   app.use(express.static(distPath));
@@ -179,12 +145,12 @@ if (fs.existsSync(distPath)) {
 
 app.get("*", (req, res) => {
   if (req.path.startsWith("/api")) {
-    return res.status(404).json({ error: "API endpoint not found" });
+    return res.status(404).json({ error: "API not found" });
   }
   if (fs.existsSync(indexPath)) {
     res.sendFile(indexPath);
   } else {
-    res.status(500).send("Frontend not built. Run npm run build.");
+    res.status(500).send("Frontend not built");
   }
 });
 
@@ -192,5 +158,4 @@ app.get("*", (req, res) => {
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📧 SMTP: ${process.env.SMTP_HOST ? "configured" : "not configured"}`);
-  console.log(`✉️ Resend: ${RESEND_API_KEY ? "configured" : "not configured"}`);
 });
