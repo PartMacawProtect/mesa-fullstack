@@ -11,12 +11,19 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 
-// ========== CSP HEADER ==========
+// Полное отключение CSP для Railway (исправляет проблему с eval)
 app.use((req, res, next) => {
+  // Удаляем все security-заголовки, которые могут блокировать JS
+  res.removeHeader("Content-Security-Policy");
+  res.removeHeader("X-Content-Security-Policy");
+  res.removeHeader("X-WebKit-CSP");
+  
+  // Явно разрешаем всё, что нужно для работы React/Vite
   res.setHeader(
     "Content-Security-Policy",
-    "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://generativelanguage.googleapis.com; frame-ancestors 'none';"
+    "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; script-src * 'unsafe-inline' 'unsafe-eval' data: blob:; style-src * 'unsafe-inline'; img-src * data: blob:; connect-src * data: blob:;"
   );
+  
   next();
 });
 
